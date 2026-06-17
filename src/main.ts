@@ -41,6 +41,20 @@ const toast = document.getElementById("toast") as HTMLDivElement;
 const historyList = document.getElementById("history-list") as HTMLDivElement;
 const btnClearHistory = document.getElementById("btn-clear-history") as HTMLButtonElement;
 
+// Dialog Modal
+const infoDialog = document.getElementById("info-dialog") as HTMLDialogElement;
+const btnInfo = document.getElementById("btn-info") as HTMLButtonElement;
+const btnCloseDialog = document.getElementById("btn-close-dialog") as HTMLButtonElement;
+
+// PWA Android/Chrome Prompts
+const pwaInstallBanner = document.getElementById("pwa-install-banner") as HTMLDivElement;
+const btnPwaInstall = document.getElementById("btn-pwa-install") as HTMLButtonElement;
+const btnPwaDismiss = document.getElementById("btn-pwa-dismiss") as HTMLButtonElement;
+
+// PWA iOS Safari Prompts
+const pwaIosSheet = document.getElementById("pwa-ios-sheet") as HTMLDivElement;
+const btnIosDismiss = document.getElementById("btn-ios-dismiss") as HTMLButtonElement;
+
 // ---------------- STATE VARIABLES ----------------
 let currentTab: "scan" | "generate" = "scan";
 let stream: MediaStream | null = null;
@@ -563,12 +577,132 @@ function init() {
 
   loadHistory();
 
+  // Dialog Open/Close Handlers
+  if (btnInfo && infoDialog && btnCloseDialog) {
+    btnInfo.addEventListener("click", () => {
+      infoDialog.showModal();
+    });
+
+    btnCloseDialog.addEventListener("click", () => {
+      infoDialog.close();
+    });
+
+    // Close on clicking dialog backdrop
+    infoDialog.addEventListener("click", (e) => {
+      const rect = infoDialog.getBoundingClientRect();
+      const isInDialog =
+        rect.top <= e.clientY &&
+        e.clientY <= rect.top + rect.height &&
+        rect.left <= e.clientX &&
+        e.clientX <= rect.left + rect.width;
+      if (!isInDialog) {
+        infoDialog.close();
+      }
+    });
+  }
+
+  // PWA Prompt Installation Logic
+  setupPwaPrompts();
+
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker
       .register("/sw.js")
       .then(() => console.log("Service Worker registered successfully"))
       .catch((err) => console.warn("Service Worker registration failed:", err));
   }
+}
+
+// ---------------- PWA INSTALLATION PROMPTS ----------------
+const SNOOZE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+
+function isSnoozed(): boolean {
+  const dismissedTime = localStorage.getItem("pwa-prompt-dismissed");
+  if (!dismissedTime) return false;
+  return Date.now() - parseInt(dismissedTime, 10) < SNOOZE_DURATION;
+}
+
+function snoozePrompt() {
+  localStorage.setItem("pwa-prompt-dismissed", Date.now().toString());
+}
+
+function setupPwaPrompts() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const isStandalone =
+    (navigator as any).standalone ||
+    (typeof window.matchMedia === "function" &&
+      window.matchMedia("(display-mode: standalone)").matches);
+
+  if (isStandalone) {
+    console.log("App is running in standalone PWA mode");
+    return;
+  }
+
+  if (isSnoozed()) {
+    console.log("PWA install prompt is currently snoozed");
+    return;
+  }
+
+  // Handle iOS Safari custom banner
+  if (isIOS && isSafari) {
+    if (pwaIosSheet && btnIosDismiss) {
+      setTimeout(() => {
+        pwaIosSheet.style.display = "block";
+        // Trigger style recalculation for animation
+        void pwaIosSheet.offsetHeight;
+        pwaIosSheet.classList.add("show");
+      }, 2500); // Delay showing for smoother UX
+
+      btnIosDismiss.addEventListener("click", () => {
+        pwaIosSheet.classList.remove("show");
+        setTimeout(() => {
+          pwaIosSheet.style.display = "none";
+        }, 400);
+        snoozePrompt();
+      });
+    }
+    return;
+  }
+
+  // Handle Android/Chrome beforeinstallprompt event
+  let deferredPrompt: any = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    // Prevent standard browser bar from showing
+    e.preventDefault();
+    deferredPrompt = e;
+
+    if (pwaInstallBanner && btnPwaInstall && btnPwaDismiss && !isSnoozed()) {
+      pwaInstallBanner.style.display = "flex";
+      // Trigger style recalculation for animation
+      void pwaInstallBanner.offsetHeight;
+      pwaInstallBanner.classList.add("show");
+
+      btnPwaInstall.addEventListener("click", () => {
+        pwaInstallBanner.classList.remove("show");
+        setTimeout(() => {
+          pwaInstallBanner.style.display = "none";
+        }, 400);
+
+        if (deferredPrompt) {
+          void deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
+            if (choiceResult.outcome === "accepted") {
+              console.log("User accepted PWA installation");
+            }
+            deferredPrompt = null;
+          });
+        }
+      });
+
+      btnPwaDismiss.addEventListener("click", () => {
+        pwaInstallBanner.classList.remove("show");
+        setTimeout(() => {
+          pwaInstallBanner.style.display = "none";
+        }, 400);
+        snoozePrompt();
+      });
+    }
+  });
 }
 
 if (document.readyState === "loading") {

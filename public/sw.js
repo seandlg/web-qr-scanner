@@ -1,4 +1,4 @@
-const CACHE_NAME = "qr-offline-cache-v1";
+const CACHE_NAME = "qr-offline-cache-v2";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
@@ -6,6 +6,11 @@ const ASSETS_TO_CACHE = [
   "/assets/index.js",
   "/assets/index.css",
   "/assets/zbar.wasm",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/icon-192-maskable.png",
+  "/icons/icon-512-maskable.png",
+  "/icons/apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
