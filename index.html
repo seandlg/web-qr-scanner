@@ -2,12 +2,67 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>web-qr-scanner</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>QR Link - Scan & Generate</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0b0f19" />
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <div class="app-card">
+      <header>
+        <h1>QR Link</h1>
+        <p class="subtitle">Secure, fast, 100% offline</p>
+      </header>
+
+      <div class="tabs">
+        <button class="tab-btn active" id="tab-scan-btn">Scan QR</button>
+        <button class="tab-btn" id="tab-generate-btn">Generate QR</button>
+      </div>
+
+      <!-- SCAN TAB VIEW -->
+      <div id="scan-tab" class="view-panel active">
+        <div class="camera-container">
+          <video id="video" autoplay playsinline muted></video>
+          <div class="scanner-overlay">
+            <div class="scan-reticle">
+              <div class="laser-line"></div>
+              <div class="corner top-left"></div>
+              <div class="corner top-right"></div>
+              <div class="corner bottom-left"></div>
+              <div class="corner bottom-right"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="result-box" id="result-box" style="display: none">
+          <span class="label">Scanned Data</span>
+          <div class="result-text" id="scan-result-text"></div>
+          <div class="button-group">
+            <button class="btn btn-secondary" id="btn-copy">Copy</button>
+            <button class="btn" id="btn-open-link" style="display: none">Open Link</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GENERATE TAB VIEW -->
+      <div id="generate-tab" class="view-panel">
+        <textarea id="qr-input" placeholder="Type text or paste URL here..."></textarea>
+
+        <div class="qr-output-container" id="qr-output" style="display: none">
+          <div class="qr-wrapper">
+            <canvas id="qr-canvas"></canvas>
+          </div>
+          <button class="btn btn-secondary" id="btn-download">Download PNG</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">Copied to clipboard!</div>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
