@@ -27,6 +27,24 @@
       <div id="scan-tab" class="view-panel active">
         <div class="camera-container">
           <video id="video" autoplay playsinline muted></video>
+          <div class="camera-controls">
+            <button
+              class="control-btn"
+              id="btn-torch"
+              title="Toggle Flashlight"
+              style="display: none"
+            >
+              🔦
+            </button>
+            <button
+              class="control-btn"
+              id="btn-switch-camera"
+              title="Switch Camera"
+              style="display: none"
+            >
+              🔄
+            </button>
+          </div>
           <div class="scanner-overlay">
             <div class="scan-reticle">
               <div class="laser-line"></div>
@@ -36,6 +54,11 @@
               <div class="corner bottom-right"></div>
             </div>
           </div>
+        </div>
+
+        <div class="file-scan-container">
+          <button class="btn btn-secondary" id="btn-scan-file">Scan from Image File</button>
+          <input type="file" id="file-input" accept="image/*" style="display: none" />
         </div>
 
         <div class="result-box" id="result-box" style="display: none">
@@ -57,6 +80,17 @@
             <canvas id="qr-canvas"></canvas>
           </div>
           <button class="btn btn-secondary" id="btn-download">Download PNG</button>
+        </div>
+      </div>
+
+      <!-- HISTORY PANEL -->
+      <div class="history-panel">
+        <div class="history-header">
+          <h2>History</h2>
+          <button class="btn-clear" id="btn-clear-history">Clear</button>
+        </div>
+        <div class="history-list" id="history-list">
+          <p class="history-empty" id="history-empty">No history items yet</p>
         </div>
       </div>
     </div>

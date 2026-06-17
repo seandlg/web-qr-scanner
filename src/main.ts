@@ -21,11 +21,24 @@ const resultText = document.getElementById("scan-result-text") as HTMLDivElement
 const btnCopy = document.getElementById("btn-copy") as HTMLButtonElement;
 const btnOpenLink = document.getElementById("btn-open-link") as HTMLButtonElement;
 
+// Floating Camera Controls
+const btnTorch = document.getElementById("btn-torch") as HTMLButtonElement;
+const btnSwitchCamera = document.getElementById("btn-switch-camera") as HTMLButtonElement;
+
+// File Upload Scanner
+const btnScanFile = document.getElementById("btn-scan-file") as HTMLButtonElement;
+const fileInput = document.getElementById("file-input") as HTMLInputElement;
+
+// Generation Handling
 const qrInput = document.getElementById("qr-input") as HTMLTextAreaElement;
 const qrOutput = document.getElementById("qr-output") as HTMLDivElement;
 const qrCanvas = document.getElementById("qr-canvas") as HTMLCanvasElement;
 const btnDownload = document.getElementById("btn-download") as HTMLButtonElement;
 const toast = document.getElementById("toast") as HTMLDivElement;
+
+// History Panel
+const historyList = document.getElementById("history-list") as HTMLDivElement;
+const btnClearHistory = document.getElementById("btn-clear-history") as HTMLButtonElement;
 
 // ---------------- STATE VARIABLES ----------------
 let currentTab: "scan" | "generate" = "scan";
@@ -34,6 +47,21 @@ let scanning = false;
 let animationFrameId: number | null = null;
 let lastScannedData = "";
 let nativeDetector: any = null;
+
+// Camera state
+let torchActive = false;
+let videoDevices: MediaDeviceInfo[] = [];
+let currentDeviceIndex = 0;
+
+// History state
+interface HistoryItem {
+  id: string;
+  type: "scan" | "generate";
+  value: string;
+  timestamp: number;
+}
+let historyItems: HistoryItem[] = [];
+let debounceTimer: number | null = null;
 
 const processingCanvas = document.createElement("canvas");
 const processingContext = processingCanvas.getContext("2d");
@@ -68,15 +96,19 @@ tabScanBtn.addEventListener("click", () => switchTab("scan"));
 tabGenerateBtn.addEventListener("click", () => switchTab("generate"));
 
 // ---------------- CAMERA STREAMS & SCAN LOOP ----------------
-async function startCamera() {
+async function startCamera(deviceId?: string) {
   if (scanning) return;
   try {
+    torchActive = false;
+    btnTorch.textContent = "🔦";
+    btnTorch.style.display = "none";
+
+    const videoConstraints: MediaTrackConstraints = deviceId
+      ? { deviceId: { exact: deviceId } }
+      : { facingMode: "environment" };
+
     stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: "environment",
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
+      video: videoConstraints,
     });
     video.srcObject = stream;
     video.setAttribute("playsinline", "true");
@@ -85,9 +117,40 @@ async function startCamera() {
     scanning = true;
     lastScannedData = "";
     animationFrameId = requestAnimationFrame(scanLoop);
+
+    // Setup controls (Torch and Switcher)
+    const track = stream.getVideoTracks()[0];
+    if (track && typeof track.getCapabilities === "function") {
+      const caps = track.getCapabilities() as any;
+      if (caps.torch) {
+        btnTorch.style.display = "flex";
+      }
+    }
+
+    // Enumerate devices for switcher
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      videoDevices = devices.filter((d) => d.kind === "videoinput");
+      if (videoDevices.length > 1) {
+        btnSwitchCamera.style.display = "flex";
+        // Sync current device index
+        const settings = track.getSettings();
+        if (settings.deviceId) {
+          const idx = videoDevices.findIndex((d) => d.deviceId === settings.deviceId);
+          if (idx !== -1) {
+            currentDeviceIndex = idx;
+          }
+        }
+      } else {
+        btnSwitchCamera.style.display = "none";
+      }
+    } catch (err) {
+      console.warn("Failed to enumerate devices:", err);
+      btnSwitchCamera.style.display = "none";
+    }
   } catch (err) {
     console.error("Camera acquisition failure:", err);
-    alert("Camera permission is required to scan QR codes.");
+    // Silent fail if camera permission is rejected, showing image upload fallback
   }
 }
 
@@ -102,6 +165,8 @@ function stopCamera() {
     stream = null;
   }
   video.srcObject = null;
+  btnTorch.style.display = "none";
+  btnSwitchCamera.style.display = "none";
 }
 
 let lastScanTime = 0;
@@ -176,7 +241,92 @@ function handleScanSuccess(data: string) {
   } catch {
     btnOpenLink.style.display = "none";
   }
+
+  // Add to local history
+  addHistoryItem("scan", data);
 }
+
+// ---------------- CAMERA CONTROLS EVENTS ----------------
+btnTorch.addEventListener("click", async () => {
+  const track = stream?.getVideoTracks()[0];
+  if (track) {
+    try {
+      torchActive = !torchActive;
+      await track.applyConstraints({
+        advanced: [{ torch: torchActive }],
+      } as any);
+      btnTorch.textContent = torchActive ? "🔥" : "🔦";
+    } catch (err) {
+      console.error("Failed to apply torch constraint:", err);
+      torchActive = false;
+      btnTorch.textContent = "🔦";
+    }
+  }
+});
+
+btnSwitchCamera.addEventListener("click", () => {
+  if (videoDevices.length <= 1) return;
+  currentDeviceIndex = (currentDeviceIndex + 1) % videoDevices.length;
+  const targetDevice = videoDevices[currentDeviceIndex];
+  stopCamera();
+  void startCamera(targetDevice.deviceId);
+});
+
+// ---------------- FILE UPLOAD SCANNING ----------------
+btnScanFile.addEventListener("click", () => {
+  fileInput.click();
+});
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = async () => {
+      // Draw onto offscreen canvas
+      processingCanvas.width = img.width;
+      processingCanvas.height = img.height;
+      processingContext?.drawImage(img, 0, 0);
+
+      let rawResult: string | null = null;
+
+      // 1. Primary: Native BarcodeDetector (if available)
+      if (nativeDetector) {
+        try {
+          const results = await nativeDetector.detect(processingCanvas);
+          if (results.length > 0) {
+            rawResult = results[0].rawValue;
+          }
+        } catch (err) {
+          console.debug("Native detection on file failed:", err);
+        }
+      }
+
+      // 2. Secondary fallback: jsQR
+      if (!rawResult && processingContext) {
+        const imgData = processingContext.getImageData(0, 0, img.width, img.height);
+        const code = jsQR(imgData.data, imgData.width, imgData.height, {
+          inversionAttempts: "dontInvert",
+        });
+        if (code) {
+          rawResult = code.data;
+        }
+      }
+
+      if (rawResult) {
+        handleScanSuccess(rawResult);
+        showToast("QR Code scanned successfully!");
+      } else {
+        showToast("No QR code found in this image.");
+      }
+      fileInput.value = "";
+    };
+    img.src = e.target?.result as string;
+  };
+  reader.readAsDataURL(file);
+});
 
 // ---------------- SCAN ACTION CONTROLS ----------------
 btnCopy.addEventListener("click", () => {
@@ -223,6 +373,14 @@ qrInput.addEventListener("input", () => {
         console.error(err);
       } else {
         qrOutput.style.display = "flex";
+
+        // Add to history debounced to avoid spamming
+        if (debounceTimer) {
+          window.clearTimeout(debounceTimer);
+        }
+        debounceTimer = window.setTimeout(() => {
+          addHistoryItem("generate", value);
+        }, 1000);
       }
     },
   );
@@ -236,6 +394,155 @@ btnDownload.addEventListener("click", () => {
   link.click();
 });
 
+// ---------------- HISTORY MANAGEMENT ----------------
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem("qr_offline_history");
+    if (raw) {
+      historyItems = JSON.parse(raw);
+    } else {
+      historyItems = [];
+    }
+  } catch (e) {
+    console.error("Failed to parse history:", e);
+    historyItems = [];
+  }
+  renderHistory();
+}
+
+function saveHistory() {
+  try {
+    localStorage.setItem("qr_offline_history", JSON.stringify(historyItems));
+  } catch (e) {
+    console.error("Failed to save history:", e);
+  }
+}
+
+function addHistoryItem(type: "scan" | "generate", value: string) {
+  // Prevent duplicate additions if same as latest item
+  if (historyItems.length > 0 && historyItems[0].type === type && historyItems[0].value === value) {
+    return;
+  }
+
+  const item: HistoryItem = {
+    id: Math.random().toString(36).substring(2, 9),
+    type,
+    value,
+    timestamp: Date.now(),
+  };
+
+  historyItems.unshift(item);
+  if (historyItems.length > 50) {
+    historyItems.pop();
+  }
+
+  saveHistory();
+  renderHistory();
+}
+
+function deleteHistoryItem(id: string) {
+  historyItems = historyItems.filter((item) => item.id !== id);
+  saveHistory();
+  renderHistory();
+}
+
+btnClearHistory.addEventListener("click", () => {
+  historyItems = [];
+  saveHistory();
+  renderHistory();
+});
+
+function renderHistory() {
+  historyList.innerHTML = "";
+
+  if (historyItems.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "history-empty";
+    empty.id = "history-empty";
+    empty.textContent = "No history items yet";
+    historyList.appendChild(empty);
+    return;
+  }
+
+  historyItems.forEach((item) => {
+    const el = document.createElement("div");
+    el.className = "history-item";
+
+    const info = document.createElement("div");
+    info.className = "history-item-info";
+
+    const tag = document.createElement("span");
+    tag.className = `history-item-tag ${item.type}`;
+    tag.textContent = item.type;
+
+    const text = document.createElement("div");
+    text.className = "history-item-text";
+    text.textContent = item.value;
+
+    const time = document.createElement("span");
+    time.className = "history-item-time";
+    time.textContent = formatTime(item.timestamp);
+
+    info.appendChild(tag);
+    info.appendChild(text);
+    info.appendChild(time);
+
+    const actions = document.createElement("div");
+    actions.className = "history-item-actions";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "history-action-btn copy";
+    copyBtn.textContent = "📋";
+    copyBtn.title = "Copy value";
+    copyBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navigator.clipboard
+        .writeText(item.value)
+        .then(() => showToast("Copied to clipboard!"))
+        .catch(() => {});
+    });
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "history-action-btn delete";
+    deleteBtn.textContent = "🗑️";
+    deleteBtn.title = "Delete item";
+    deleteBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteHistoryItem(item.id);
+    });
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(deleteBtn);
+
+    el.appendChild(info);
+    el.appendChild(actions);
+
+    el.addEventListener("click", () => {
+      if (item.type === "scan") {
+        switchTab("scan");
+        handleScanSuccess(item.value);
+      } else {
+        switchTab("generate");
+        qrInput.value = item.value;
+        qrInput.dispatchEvent(new Event("input"));
+      }
+    });
+
+    historyList.appendChild(el);
+  });
+}
+
+function formatTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  if (diff < 60000) return "just now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 // ---------------- TOAST POPUP ----------------
 function showToast(message: string) {
   toast.textContent = message;
@@ -248,6 +555,7 @@ function showToast(message: string) {
 // ---------------- INITIALIZATION & SERVICE WORKER ----------------
 function init() {
   void startCamera();
+  loadHistory();
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker
