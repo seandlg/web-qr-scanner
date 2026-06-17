@@ -5,6 +5,7 @@ const ASSETS_TO_CACHE = [
   "/manifest.json",
   "/assets/index.js",
   "/assets/index.css",
+  "/assets/zbar.wasm",
 ];
 
 self.addEventListener("install", (event) => {

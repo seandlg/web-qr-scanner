@@ -1,6 +1,21 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vite-plus/test";
 
+// Mock global detector spy
+const mockDetect = vi.fn().mockResolvedValue([{ rawValue: "Mock Scanned Data" }]);
+
+// Mock barcode detector polyfill to avoid WebAssembly compilation in JSDOM
+vi.mock("@undecaf/barcode-detector-polyfill", () => {
+  return {
+    BarcodeDetectorPolyfill: class MockBarcodeDetectorPolyfill {
+      constructor() {}
+      detect(image: any) {
+        return mockDetect(image);
+      }
+    },
+  };
+});
+
 // Mock track methods
 const mockTrack = {
   stop: vi.fn(),
@@ -117,14 +132,53 @@ describe("QR Code WebApp Test Suite", () => {
       </div>
       <div id="scan-tab" class="view-panel active">
         <div class="camera-container">
-          <video id="video" autoplay playsinline muted></video>
-          <div class="camera-controls">
-            <button class="control-btn" id="btn-torch" title="Toggle Flashlight" style="display: none">🔦</button>
-            <button class="control-btn" id="btn-switch-camera" title="Switch Camera" style="display: none">🔄</button>
+          <div class="camera-placeholder" id="camera-placeholder">
+            <div class="placeholder-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </div>
+            <h3>QR Code Scanner</h3>
+            <p>Grant camera permission to begin scanning</p>
+            <button class="btn" id="btn-enable-camera">Enable Camera</button>
+          </div>
+          <video id="video" autoplay playsinline muted style="display: none;"></video>
+          <div class="scanner-overlay" style="display: none;">
+            <div class="scan-reticle">
+              <div class="laser-line"></div>
+              <div class="corner top-left"></div>
+              <div class="corner top-right"></div>
+              <div class="corner bottom-left"></div>
+              <div class="corner bottom-right"></div>
+            </div>
           </div>
         </div>
-        <div class="file-scan-container">
-          <button class="btn btn-secondary" id="btn-scan-file">Scan from Image File</button>
+        <div class="camera-toolbar" id="camera-toolbar">
+          <button class="btn btn-secondary" id="btn-switch-camera" style="display: none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 1-9 9m-9-9a9 9 0 0 1 9-9" />
+              <path d="m17 20 4-4-4-4" />
+              <path d="m7 4-4 4 4 4" />
+            </svg>
+            <span>Switch Camera</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-torch" style="display: none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6H6a2 2 0 0 0-2 2v3a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4V8a2 2 0 0 0-2-2z" />
+              <path d="M9 15v5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-5" />
+              <line x1="12" y1="9" x2="12" y2="11" />
+            </svg>
+            <span>Flashlight</span>
+          </button>
+          <button class="btn btn-secondary" id="btn-scan-file">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            <span>Upload Image</span>
+          </button>
           <input type="file" id="file-input" accept="image/*" style="display: none" />
         </div>
         <div class="result-box" id="result-box" style="display: none;">
@@ -156,8 +210,16 @@ describe("QR Code WebApp Test Suite", () => {
     await import("./main.ts");
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
+    mockTrack.applyConstraints.mockClear();
+    mockGetUserMedia.mockClear();
+    mockDetect.mockClear();
+
+    const btnClearHistory = document.getElementById("btn-clear-history") as HTMLButtonElement;
+    if (btnClearHistory) {
+      btnClearHistory.click();
+    }
 
     const qrInput = document.getElementById("qr-input") as HTMLTextAreaElement;
     const qrOutput = document.getElementById("qr-output") as HTMLDivElement;
@@ -169,6 +231,13 @@ describe("QR Code WebApp Test Suite", () => {
     // Switch back to scan tab if generate tab is active
     if (!tabScanBtn.classList.contains("active")) {
       tabScanBtn.click();
+    }
+
+    // Auto-enable camera in test environment to simulate user consent
+    const btnEnableCamera = document.getElementById("btn-enable-camera") as HTMLButtonElement;
+    if (btnEnableCamera) {
+      btnEnableCamera.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
     }
   });
 
@@ -236,7 +305,7 @@ describe("QR Code WebApp Test Suite", () => {
     expect(mockTrack.applyConstraints).toHaveBeenCalledWith({
       advanced: [{ torch: true }],
     });
-    expect(btnTorch.textContent).toBe("🔥");
+    expect(btnTorch.classList.contains("active")).toBe(true);
 
     // Click again to turn off
     btnTorch.click();
@@ -245,7 +314,7 @@ describe("QR Code WebApp Test Suite", () => {
     expect(mockTrack.applyConstraints).toHaveBeenCalledWith({
       advanced: [{ torch: false }],
     });
-    expect(btnTorch.textContent).toBe("🔦");
+    expect(btnTorch.classList.contains("active")).toBe(false);
   });
 
   it("should switch camera when multiple devices are available", async () => {
@@ -266,6 +335,8 @@ describe("QR Code WebApp Test Suite", () => {
   it("should scan QR from loaded file", async () => {
     const fileInput = document.getElementById("file-input") as HTMLInputElement;
 
+    mockDetect.mockResolvedValueOnce([{ rawValue: "File Scanned QR Value" }]);
+
     // Simulate file input change event
     const file = new File(["dummy content"], "qr.png", { type: "image/png" });
     Object.defineProperty(fileInput, "files", {
@@ -278,8 +349,12 @@ describe("QR Code WebApp Test Suite", () => {
     // Wait for Reader and Image load simulation
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // Note: in JSDOM, offscreen context getImageData will return zeroed data so jsQR returns null.
-    // However, FileReader load is verified by clearing input element.
+    // Verify it called detect
+    expect(mockDetect).toHaveBeenCalled();
+
+    // Verify results show up
+    const resultText = document.getElementById("scan-result-text") as HTMLDivElement;
+    expect(resultText.textContent).toBe("File Scanned QR Value");
     expect(fileInput.value).toBe("");
   });
 

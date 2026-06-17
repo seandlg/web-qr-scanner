@@ -13,14 +13,21 @@ catalogs:
 overrides:
   vite: npm:@voidzero-dev/vite-plus-core@latest
   vitest: npm:@voidzero-dev/vite-plus-test@^0.1.24
+  '@undecaf/zbar-wasm': ^0.11.0
+
+patchedDependencies:
+  '@undecaf/barcode-detector-polyfill': 418732867afcbffad27a469e54f006bdd07dc794ffa89d308bec46f0b542df6e
 
 importers:
 
   .:
     dependencies:
-      jsqr:
-        specifier: ^1.4.0
-        version: 1.4.0
+      '@undecaf/barcode-detector-polyfill':
+        specifier: ^0.9.23
+        version: 0.9.23(patch_hash=418732867afcbffad27a469e54f006bdd07dc794ffa89d308bec46f0b542df6e)
+      '@undecaf/zbar-wasm':
+        specifier: ^0.11.0
+        version: 0.11.0
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -416,6 +423,12 @@ packages:
   '@types/qrcode@1.5.6':
     resolution: {integrity: sha512-te7NQcV2BOvdj2b1hCAHzAoMNuj65kNBMz0KBaxM6c3VGBOhU0dURQKOtH8CFNI/dsKkwlv32p26qYQTWoB5bw==}
 
+  '@undecaf/barcode-detector-polyfill@0.9.23':
+    resolution: {integrity: sha512-qVr7jSUbE5a30X9dByDym2NzsqyH+MFwyFiu4QSHDQMLCImTJj/et7pEcOtGqlL4UB5J6J3d0hK4/5d4MMowYA==}
+
+  '@undecaf/zbar-wasm@0.11.0':
+    resolution: {integrity: sha512-z2UZ+Uc50+qyE+HbU+Obdk/E5ecB7xYiu0i99bHQ9VlZVH0JMmE/5mJQa16Cutvwt80C9OZl8jEVayf5s5Azow==}
+
   '@voidzero-dev/vite-plus-core@0.1.24':
     resolution: {integrity: sha512-iXPGBABnQnrDMx89H6MOCGcTZp+QW+3rY4YMVKdE6ydchSvPk2O3MI2vgaRVfOtWJ2IjnxSnf1n2yjP67ZBRFQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -664,9 +677,6 @@ packages:
     peerDependenciesMeta:
       canvas:
         optional: true
-
-  jsqr@1.4.0:
-    resolution: {integrity: sha512-dxLob7q65Xg2DvstYkRpkYtmKm2sPJ9oFhrhmudT1dZvNFFTlroai3AWSpLey/w5vMcLBXRgOJsbXpdN9HzU/A==}
 
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
@@ -1200,6 +1210,12 @@ snapshots:
     dependencies:
       '@types/node': 25.9.3
 
+  '@undecaf/barcode-detector-polyfill@0.9.23(patch_hash=418732867afcbffad27a469e54f006bdd07dc794ffa89d308bec46f0b542df6e)':
+    dependencies:
+      '@undecaf/zbar-wasm': 0.11.0
+
+  '@undecaf/zbar-wasm@0.11.0': {}
+
   '@voidzero-dev/vite-plus-core@0.1.24(@types/node@25.9.3)(typescript@6.0.3)':
     dependencies:
       '@oxc-project/runtime': 0.133.0
@@ -1377,8 +1393,6 @@ snapshots:
       xml-name-validator: 5.0.0
     transitivePeerDependencies:
       - '@noble/hashes'
-
-  jsqr@1.4.0: {}
 
   lightningcss-android-arm64@1.32.0:
     optional: true

@@ -5,6 +5,9 @@ catalog:
 overrides:
   vite: "catalog:"
   vitest: "catalog:"
+  "@undecaf/zbar-wasm": "^0.11.0"
+patchedDependencies:
+  "@undecaf/barcode-detector-polyfill": setup/patches/@undecaf__barcode-detector-polyfill.patch
 peerDependencyRules:
   allowAny:
     - vite

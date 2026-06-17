@@ -344,48 +344,70 @@ textarea:focus {
   opacity: 1;
 }
 
-/* Floating Camera Controls */
-.camera-controls {
+/* Camera Permission Placeholder */
+.camera-placeholder {
   position: absolute;
-  top: 16px;
-  left: 16px;
-  right: 16px;
+  inset: 0;
   display: flex;
-  justify-content: space-between;
-  z-index: 10;
-  pointer-events: none;
-}
-
-.control-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-main);
-  font-size: 1.2rem;
-  cursor: pointer;
-  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  pointer-events: auto;
-  transition: all 0.2s ease;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 50%, rgba(20, 29, 47, 0.95) 0%, #0b0f19 100%);
+  z-index: 5;
 }
 
-.control-btn:active {
-  transform: scale(0.9);
+.placeholder-icon {
+  margin-bottom: 16px;
+  color: var(--accent);
+  filter: drop-shadow(0 0 10px var(--accent-glow));
+  animation: pulse-placeholder 2s infinite ease-in-out;
 }
 
-/* Local File Scan Container */
-.file-scan-container {
-  display: flex;
+@keyframes pulse-placeholder {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+.camera-placeholder h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text-main);
+}
+
+.camera-placeholder p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  max-width: 280px;
+  line-height: 1.4;
+}
+
+/* Camera Action Toolbar */
+.camera-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
   width: 100%;
 }
 
-.file-scan-container > button {
+.camera-toolbar .btn {
   width: 100%;
+}
+
+#btn-torch.active {
+  background: var(--accent);
+  color: #0b0f19;
+  box-shadow: 0 0 16px var(--accent-glow);
 }
 
 /* History Panel Styling */
@@ -543,4 +565,63 @@ textarea:focus {
 .history-action-btn.delete:hover {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
+}
+
+/* Core Promises Section */
+.promises-section {
+  width: 100%;
+  max-width: 480px;
+  margin-top: 28px;
+  margin-bottom: 20px;
+}
+
+.promises-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+
+.promises-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.promise-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.promise-icon {
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.promise-card h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.promise-card p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0;
 }

@@ -1,0 +1,13 @@
+diff --git a/dist/main.js b/dist/main.js
+index c57980cfe36b7dd570a41b4e624964086c844412..56778443dee78cc09edc7736b636e2546d6f24ff 100644
+--- a/dist/main.js
++++ b/dist/main.js
+@@ -8,7 +8,7 @@
+  * This work uses https://github.com/undecaf/zbar-wasm.git as per
+  * LGPL-2.1 section 6 (https://opensource.org/licenses/LGPL-2.1).
+  */
+-import{ZBarSymbolType as e,ZBarConfigType as t,scanRGBABuffer as n,getDefaultScanner as i}from"https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.16/dist/main.js";
++import{ZBarSymbolType as e,ZBarConfigType as t,scanRGBABuffer as n,getDefaultScanner as i}from"@undecaf/zbar-wasm";
+ /*! *****************************************************************************
+ Copyright (c) Microsoft Corporation.
+ 

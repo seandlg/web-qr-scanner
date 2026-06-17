@@ -10,7 +10,8 @@
     "prepare": "vp config"
   },
   "dependencies": {
-    "jsqr": "^1.4.0",
+    "@undecaf/barcode-detector-polyfill": "^0.9.23",
+    "@undecaf/zbar-wasm": "^0.11.0",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

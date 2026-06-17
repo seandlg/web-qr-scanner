@@ -1,4 +1,5 @@
-import jsQR from "jsqr";
+import "./style.css";
+import { BarcodeDetectorPolyfill } from "@undecaf/barcode-detector-polyfill";
 import QRCode from "qrcode";
 
 // Native interface declaration for TypeScript compilation
@@ -21,11 +22,11 @@ const resultText = document.getElementById("scan-result-text") as HTMLDivElement
 const btnCopy = document.getElementById("btn-copy") as HTMLButtonElement;
 const btnOpenLink = document.getElementById("btn-open-link") as HTMLButtonElement;
 
-// Floating Camera Controls
+// Camera Toolbar and Placeholder Controls
+const cameraPlaceholder = document.getElementById("camera-placeholder") as HTMLDivElement;
+const btnEnableCamera = document.getElementById("btn-enable-camera") as HTMLButtonElement;
 const btnTorch = document.getElementById("btn-torch") as HTMLButtonElement;
 const btnSwitchCamera = document.getElementById("btn-switch-camera") as HTMLButtonElement;
-
-// File Upload Scanner
 const btnScanFile = document.getElementById("btn-scan-file") as HTMLButtonElement;
 const fileInput = document.getElementById("file-input") as HTMLInputElement;
 
@@ -44,9 +45,24 @@ const btnClearHistory = document.getElementById("btn-clear-history") as HTMLButt
 let currentTab: "scan" | "generate" = "scan";
 let stream: MediaStream | null = null;
 let scanning = false;
+let cameraActive = false;
 let animationFrameId: number | null = null;
 let lastScannedData = "";
-let nativeDetector: any = null;
+
+// Resolve dynamic detector class (native fallback to WebAssembly ZBar polyfill)
+let DetectorClass: any;
+if ("BarcodeDetector" in window) {
+  DetectorClass = (window as any).BarcodeDetector;
+} else {
+  DetectorClass = BarcodeDetectorPolyfill;
+}
+
+let detector: any = null;
+try {
+  detector = new DetectorClass({ formats: ["qr_code"] });
+} catch (e) {
+  console.warn("Detector initialization failed:", e);
+}
 
 // Camera state
 let torchActive = false;
@@ -63,18 +79,6 @@ interface HistoryItem {
 let historyItems: HistoryItem[] = [];
 let debounceTimer: number | null = null;
 
-const processingCanvas = document.createElement("canvas");
-const processingContext = processingCanvas.getContext("2d");
-
-// Instantiate Native API if available
-if ("BarcodeDetector" in window) {
-  try {
-    nativeDetector = new BarcodeDetector({ formats: ["qr_code"] });
-  } catch (e) {
-    console.warn("BarcodeDetector initialization failed:", e);
-  }
-}
-
 // ---------------- TAB HANDLING ----------------
 function switchTab(tab: "scan" | "generate") {
   if (currentTab === tab) return;
@@ -86,9 +90,15 @@ function switchTab(tab: "scan" | "generate") {
   generateTab.classList.toggle("active", tab === "generate");
 
   if (tab === "scan") {
-    void startCamera();
+    if (cameraActive) {
+      void startCamera();
+    } else {
+      stopCamera();
+    }
   } else {
+    const tempActive = cameraActive;
     stopCamera();
+    cameraActive = tempActive;
   }
 }
 
@@ -100,8 +110,9 @@ async function startCamera(deviceId?: string) {
   if (scanning) return;
   try {
     torchActive = false;
-    btnTorch.textContent = "🔦";
+    btnTorch.classList.remove("active");
     btnTorch.style.display = "none";
+    btnSwitchCamera.style.display = "none";
 
     const videoConstraints: MediaTrackConstraints = deviceId
       ? { deviceId: { exact: deviceId } }
@@ -110,11 +121,18 @@ async function startCamera(deviceId?: string) {
     stream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
     });
+
+    cameraPlaceholder.style.display = "none";
+    video.style.display = "block";
+    const overlay = document.querySelector(".scanner-overlay") as HTMLDivElement;
+    if (overlay) overlay.style.display = "flex";
+
     video.srcObject = stream;
     video.setAttribute("playsinline", "true");
     await video.play();
 
     scanning = true;
+    cameraActive = true;
     lastScannedData = "";
     animationFrameId = requestAnimationFrame(scanLoop);
 
@@ -123,7 +141,7 @@ async function startCamera(deviceId?: string) {
     if (track && typeof track.getCapabilities === "function") {
       const caps = track.getCapabilities() as any;
       if (caps.torch) {
-        btnTorch.style.display = "flex";
+        btnTorch.style.display = "inline-flex";
       }
     }
 
@@ -132,7 +150,7 @@ async function startCamera(deviceId?: string) {
       const devices = await navigator.mediaDevices.enumerateDevices();
       videoDevices = devices.filter((d) => d.kind === "videoinput");
       if (videoDevices.length > 1) {
-        btnSwitchCamera.style.display = "flex";
+        btnSwitchCamera.style.display = "inline-flex";
         // Sync current device index
         const settings = track.getSettings();
         if (settings.deviceId) {
@@ -148,14 +166,32 @@ async function startCamera(deviceId?: string) {
       console.warn("Failed to enumerate devices:", err);
       btnSwitchCamera.style.display = "none";
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("Camera acquisition failure:", err);
-    // Silent fail if camera permission is rejected, showing image upload fallback
+    cameraActive = false;
+    scanning = false;
+
+    cameraPlaceholder.style.display = "flex";
+    video.style.display = "none";
+    const overlay = document.querySelector(".scanner-overlay") as HTMLDivElement;
+    if (overlay) overlay.style.display = "none";
+
+    const placeholderText = cameraPlaceholder.querySelector("p");
+    if (placeholderText) {
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        placeholderText.textContent =
+          "Camera access denied. Please enable camera permissions in browser settings to scan.";
+      } else {
+        placeholderText.textContent =
+          "Could not access camera. Please select an image file to scan instead.";
+      }
+    }
   }
 }
 
 function stopCamera() {
   scanning = false;
+  cameraActive = false;
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
@@ -165,6 +201,17 @@ function stopCamera() {
     stream = null;
   }
   video.srcObject = null;
+
+  video.style.display = "none";
+  const overlay = document.querySelector(".scanner-overlay") as HTMLDivElement;
+  if (overlay) overlay.style.display = "none";
+  cameraPlaceholder.style.display = "flex";
+
+  const placeholderText = cameraPlaceholder.querySelector("p");
+  if (placeholderText) {
+    placeholderText.textContent = "Grant camera permission to begin scanning";
+  }
+
   btnTorch.style.display = "none";
   btnSwitchCamera.style.display = "none";
 }
@@ -178,41 +225,17 @@ async function scanLoop(timestamp: number) {
   if (timestamp - lastScanTime >= SCAN_INTERVAL) {
     lastScanTime = timestamp;
 
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      let rawResult: string | null = null;
-
-      // 1. Primary Attempt: Native Hardware API
-      if (nativeDetector) {
-        try {
-          const results = await nativeDetector.detect(video);
-          if (results.length > 0) {
-            rawResult = results[0].rawValue;
+    if (video.readyState === video.HAVE_ENOUGH_DATA && detector) {
+      try {
+        const results = await detector.detect(video);
+        if (results.length > 0) {
+          const rawResult = results[0].rawValue;
+          if (rawResult && rawResult !== lastScannedData) {
+            handleScanSuccess(rawResult);
           }
-        } catch (e) {
-          console.debug("Native decoder check bypassed:", e);
         }
-      }
-
-      // 2. Secondary Attempt: Pure JavaScript Fallback (Offline Ready)
-      if (!rawResult && processingContext) {
-        const width = video.videoWidth;
-        const height = video.videoHeight;
-        processingCanvas.width = width;
-        processingCanvas.height = height;
-        processingContext.drawImage(video, 0, 0, width, height);
-
-        const imgData = processingContext.getImageData(0, 0, width, height);
-        const code = jsQR(imgData.data, imgData.width, imgData.height, {
-          inversionAttempts: "dontInvert",
-        });
-
-        if (code) {
-          rawResult = code.data;
-        }
-      }
-
-      if (rawResult && rawResult !== lastScannedData) {
-        handleScanSuccess(rawResult);
+      } catch (e) {
+        console.debug("Detection check bypassed/failed:", e);
       }
     }
   }
@@ -255,11 +278,11 @@ btnTorch.addEventListener("click", async () => {
       await track.applyConstraints({
         advanced: [{ torch: torchActive }],
       } as any);
-      btnTorch.textContent = torchActive ? "🔥" : "🔦";
+      btnTorch.classList.toggle("active", torchActive);
     } catch (err) {
       console.error("Failed to apply torch constraint:", err);
       torchActive = false;
-      btnTorch.textContent = "🔦";
+      btnTorch.classList.remove("active");
     }
   }
 });
@@ -285,41 +308,20 @@ fileInput.addEventListener("change", () => {
   reader.onload = (e) => {
     const img = new Image();
     img.onload = async () => {
-      // Draw onto offscreen canvas
-      processingCanvas.width = img.width;
-      processingCanvas.height = img.height;
-      processingContext?.drawImage(img, 0, 0);
-
-      let rawResult: string | null = null;
-
-      // 1. Primary: Native BarcodeDetector (if available)
-      if (nativeDetector) {
+      if (detector) {
         try {
-          const results = await nativeDetector.detect(processingCanvas);
+          const results = await detector.detect(img);
           if (results.length > 0) {
-            rawResult = results[0].rawValue;
+            const rawResult = results[0].rawValue;
+            handleScanSuccess(rawResult);
+            showToast("QR Code scanned successfully!");
+          } else {
+            showToast("No QR code found in this image.");
           }
         } catch (err) {
-          console.debug("Native detection on file failed:", err);
+          console.error("File detection failed:", err);
+          showToast("Error scanning image file.");
         }
-      }
-
-      // 2. Secondary fallback: jsQR
-      if (!rawResult && processingContext) {
-        const imgData = processingContext.getImageData(0, 0, img.width, img.height);
-        const code = jsQR(imgData.data, imgData.width, imgData.height, {
-          inversionAttempts: "dontInvert",
-        });
-        if (code) {
-          rawResult = code.data;
-        }
-      }
-
-      if (rawResult) {
-        handleScanSuccess(rawResult);
-        showToast("QR Code scanned successfully!");
-      } else {
-        showToast("No QR code found in this image.");
       }
       fileInput.value = "";
     };
@@ -554,7 +556,11 @@ function showToast(message: string) {
 
 // ---------------- INITIALIZATION & SERVICE WORKER ----------------
 function init() {
-  void startCamera();
+  // Bind enable camera button click listener
+  btnEnableCamera.addEventListener("click", () => {
+    void startCamera();
+  });
+
   loadHistory();
 
   if ("serviceWorker" in navigator) {
@@ -573,8 +579,10 @@ if (document.readyState === "loading") {
 
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    const wasActive = cameraActive;
     stopCamera();
-  } else if (currentTab === "scan") {
+    cameraActive = wasActive;
+  } else if (currentTab === "scan" && cameraActive) {
     void startCamera();
   }
 });
