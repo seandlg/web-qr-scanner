@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeAll, beforeEach } from "vite-plus/test";
+import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 
 // Mock global detector spy
 const mockDetect = vi.fn().mockResolvedValue([{ rawValue: "Mock Scanned Data" }]);
@@ -123,9 +123,7 @@ class MockImage {
 vi.stubGlobal("Image", MockImage);
 
 describe("QR Code WebApp Test Suite", () => {
-  beforeAll(async () => {
-    // Setup initial DOM once
-    document.body.innerHTML = `
+  const htmlContent = `
       <div class="tabs">
         <button class="tab-btn active" id="tab-scan-btn">Scan QR</button>
         <button class="tab-btn" id="tab-generate-btn">Generate QR</button>
@@ -204,41 +202,19 @@ describe("QR Code WebApp Test Suite", () => {
         </div>
       </div>
       <div class="toast" id="toast">Copied to clipboard!</div>
-    `;
-
-    // Import main to trigger initialization logic
-    await import("./main.ts");
-  });
+  `;
 
   beforeEach(async () => {
+    vi.resetModules();
     localStorage.clear();
     mockTrack.applyConstraints.mockClear();
     mockGetUserMedia.mockClear();
     mockDetect.mockClear();
 
-    const btnClearHistory = document.getElementById("btn-clear-history") as HTMLButtonElement;
-    if (btnClearHistory) {
-      btnClearHistory.click();
-    }
+    document.body.innerHTML = htmlContent;
 
-    const qrInput = document.getElementById("qr-input") as HTMLTextAreaElement;
-    const qrOutput = document.getElementById("qr-output") as HTMLDivElement;
-    const tabScanBtn = document.getElementById("tab-scan-btn") as HTMLButtonElement;
-
-    qrInput.value = "";
-    qrOutput.style.display = "none";
-
-    // Switch back to scan tab if generate tab is active
-    if (!tabScanBtn.classList.contains("active")) {
-      tabScanBtn.click();
-    }
-
-    // Auto-enable camera in test environment to simulate user consent
-    const btnEnableCamera = document.getElementById("btn-enable-camera") as HTMLButtonElement;
-    if (btnEnableCamera) {
-      btnEnableCamera.click();
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
+    // Import main to trigger initialization logic in clean scope
+    await import("./main.ts");
   });
 
   it("should initialize and register Service Worker", () => {
@@ -293,7 +269,8 @@ describe("QR Code WebApp Test Suite", () => {
   });
 
   it("should toggle flashlight (torch) when supported", async () => {
-    // Wait for camera initialization from beforeAll
+    const btnEnableCamera = document.getElementById("btn-enable-camera") as HTMLButtonElement;
+    btnEnableCamera.click();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const btnTorch = document.getElementById("btn-torch") as HTMLButtonElement;
@@ -318,7 +295,8 @@ describe("QR Code WebApp Test Suite", () => {
   });
 
   it("should switch camera when multiple devices are available", async () => {
-    // Wait for initialization
+    const btnEnableCamera = document.getElementById("btn-enable-camera") as HTMLButtonElement;
+    btnEnableCamera.click();
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const btnSwitchCamera = document.getElementById("btn-switch-camera") as HTMLButtonElement;
@@ -381,5 +359,44 @@ describe("QR Code WebApp Test Suite", () => {
     // Clear history
     btnClearHistory.click();
     expect(historyList.querySelector(".history-empty")).not.toBeNull();
+  });
+
+  it("should show permission placeholder initially and start camera on click", async () => {
+    const placeholder = document.getElementById("camera-placeholder") as HTMLDivElement;
+    const videoElement = document.getElementById("video") as HTMLVideoElement;
+    const btnEnableCamera = document.getElementById("btn-enable-camera") as HTMLButtonElement;
+
+    // Initially, placeholder is visible, video is hidden
+    expect(placeholder.style.display).not.toBe("none");
+    expect(videoElement.style.display).toBe("none");
+
+    // Click enable camera
+    btnEnableCamera.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // After enabling, placeholder is hidden, video is visible
+    expect(placeholder.style.display).toBe("none");
+    expect(videoElement.style.display).toBe("block");
+  });
+
+  it("should display browser settings instructions when camera permission is denied", async () => {
+    const placeholder = document.getElementById("camera-placeholder") as HTMLDivElement;
+    const btnEnableCamera = document.getElementById("btn-enable-camera") as HTMLButtonElement;
+
+    // Mock getUserMedia to reject with permission denied error
+    const permissionError = new Error("Permission Denied");
+    permissionError.name = "NotAllowedError";
+    mockGetUserMedia.mockRejectedValueOnce(permissionError);
+
+    // Click enable camera
+    btnEnableCamera.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Placeholder stays visible and displays the permission error instructions
+    expect(placeholder.style.display).not.toBe("none");
+    const descText = placeholder.querySelector("p");
+    expect(descText?.textContent).toContain(
+      "Camera access denied. Please enable camera permissions",
+    );
   });
 });
