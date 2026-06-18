@@ -162,7 +162,8 @@ async function startCamera(deviceId?: string) {
     // Enumerate devices for switcher
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      videoDevices = devices.filter((d) => d.kind === "videoinput");
+      const allVideoDevices = devices.filter((d) => d.kind === "videoinput");
+      videoDevices = filterVideoDevices(allVideoDevices);
       if (videoDevices.length > 1) {
         btnSwitchCamera.style.display = "inline-flex";
         // Sync current device index
@@ -703,6 +704,38 @@ function setupPwaPrompts() {
       });
     }
   });
+}
+
+function filterVideoDevices(devices: MediaDeviceInfo[]): MediaDeviceInfo[] {
+  // If labels are empty (e.g. before permissions, though shouldn't happen here), return all
+  if (devices.every((d) => !d.label)) {
+    return devices;
+  }
+
+  const filtered = devices.filter((device) => {
+    const label = device.label.toLowerCase();
+
+    // Keep front camera
+    if (label.includes("front") || label.includes("user") || label.includes("truedepth")) {
+      return true;
+    }
+
+    // Exclude secondary back cameras
+    if (
+      label.includes("ultra") ||
+      label.includes("telephoto") ||
+      label.includes("dual") ||
+      label.includes("triple") ||
+      label.includes("zoom") ||
+      label.includes("virtual")
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return filtered.length > 0 ? filtered : devices;
 }
 
 if (document.readyState === "loading") {
